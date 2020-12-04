@@ -16,11 +16,11 @@ namespace MyGame
 		public:
 			MainView(const axl::util::WString& title, const axl::math::Vec2i& position, const axl::math::Vec2i& size, const Cursor& cursor = DefaultCursor);
 			bool isValid() const;
-			bool create(bool recreate = false, axl::game::View::Flags flags = axl::game::View::VF_FIXED, const MyGame::Config* game_config = 0);
+			bool create(bool recreate = false, axl::game::View::Flags flags = axl::game::View::VF_FIXED);
 			void destroy();
 			bool init();
 			void update();
-			bool render(bool final = false);
+			bool render();
 			axl::math::Vec2f screenToViewport(const axl::math::Vec2f& vec) const;
 			axl::math::Vec2f viewportToScreen(const axl::math::Vec2f& vec) const;
 		public: // Event callback methods
@@ -48,11 +48,14 @@ namespace MyGame
 			axl::math::Mat3f m_screen_to_viewport;
 			struct UserData {
 				bool is_animating;
+				bool are_axes_shown;
+				bool is_cursor_shown;
 				Cursor last_cursor;
 				std::clock_t update_clock;
 				double delta_time;
 			} m_user_data;
 			struct KeyData {
+				bool f1_lock;
 				bool f2_lock;
 				bool f3_lock;
 				bool f4_lock;

@@ -2,11 +2,11 @@
 #include <cstdlib>
 #include <cmath>
 #include <ctime>
-#include <MyGame/MainView.hpp>
-#include <MyGame/Config.hpp>
+#include <MainView.hpp>
 #include <axl.glw/gl1.hpp>
 #include <axl.math/constants.hpp>
 #include <axl.math/angle.hpp>
+#include <axl.math/util.hpp>
 #include <glerr.hpp>
 
 namespace MyGame {
@@ -21,12 +21,12 @@ MainView::MainView(const axl::util::WString& _title, const axl::math::Vec2i& _po
 
 bool MainView::isValid() const
 {
-	return axl::game::View::isValid() && m_main_context.isValid();
+	return axl::game::View::isValid();
 }
 
-bool MainView::create(bool recreate, axl::game::View::Flags flags, const MyGame::Config* game_config)
+bool MainView::create(bool recreate, axl::game::View::Flags flags)
 {
-	const axl::game::View::Config view_config[] = {
+	const axl::game::View::Config view_configs[] = {
 		axl::game::View::Config(1, axl::game::View::Config::PT_RGBA, 32,8,8,8,8, 24,8, 0,0,0,0,0, 64, true, false),
 		axl::game::View::Config(2, axl::game::View::Config::PT_RGBA, 32,8,8,8,8, 24,8, 0,0,0,0,0, 32, true, false),
 		axl::game::View::Config(3, axl::game::View::Config::PT_RGBA, 32,8,8,8,8, 24,8, 0,0,0,0,0, 16, true, false),
@@ -47,7 +47,7 @@ bool MainView::create(bool recreate, axl::game::View::Flags flags, const MyGame:
 	};
 	int main_context_configs_count = sizeof(main_context_configs) / sizeof(axl::game::Context::Config);
 
-	if(!axl::game::View::create(recreate, game_config ? view_configs : 0, game_config ?  : 0, flags))
+	if(!axl::game::View::create(recreate, view_configs, view_configs_count, flags))
 		return false;
 	if(!m_main_context.create(recreate, this, main_context_configs, main_context_configs_count))
 		return false;
@@ -61,19 +61,16 @@ void MainView::destroy()
 
 bool MainView::init()
 {
+	m_scale = 1.0;
 	m_origin.set(0.0f, 0.0f);
 	m_viewport_pos.set(0.0f, 0.0f);
 	m_viewport_to_screen = axl::math::Mat3f::Identity;
 	m_screen_to_viewport = axl::math::Mat3f::Identity;
 	m_projection_min.set(-1.0f, -1.0f);
 	m_projection_max.set(1.0f, 1.0f);
-	// drawables
-	m_drawables.polygon.p_vertex_array = (axl::glw::gl::GLfloat*)0;
-	m_drawables.polygon.vertex_buffer = 0;
-	m_drawables.polygon.sides = 0;
-	m_drawables.polygon.draw_mode = axl::glw::gl::GL_POINTS;
 	// user data
 	m_user_data.is_animating = true;
+	m_user_data.are_axes_shown = true;
 	m_user_data.is_cursor_shown = false;
 	m_user_data.last_cursor = DefaultCursor;
 	m_user_data.update_clock = std::clock();
@@ -95,6 +92,7 @@ bool MainView::init()
 			GLE(glShadeModel(GL_FLAT));
 			GLE(glEnable(GL_BLEND));
 			GLE(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+			return true;
 		}
 	}
 	return false;
@@ -107,9 +105,12 @@ void MainView::update()
 	m_user_data.delta_time = (double)((double)std::clock() - m_user_data.update_clock) * CLOCK_FACTOR;
 	m_user_data.update_clock = std::clock();
 	// update
+	static double scale_freq = 0.0;
+	scale_freq += axl::math::Angle::degToRad(90.0) * m_user_data.delta_time;
+	m_scale = axl::math::Util::map(std::sin(scale_freq), -1.0, 1.0, 0.0, 1.0);
 }
 
-bool MainView::render(bool final)
+bool MainView::render()
 {
 	if(m_main_context.makeCurrent())
 	{
@@ -120,36 +121,30 @@ bool MainView::render(bool final)
 		glLoadIdentity();
 		glTranslatef(m_origin.x, m_origin.y, 0.0);
 		glScalef(m_scale, m_scale, m_scale);
-		// Axes
-		if(m_user_data.are_axes_shown)
+		if(axl::glw::gl1::V_1_1)
 		{
-			glPushMatrix();
+			// Axes
+			if(m_user_data.are_axes_shown)
+			{
+				glPushMatrix();
 				glBegin(GL_LINES);
-					glColor4d(1.0,0.1,0.1,0.318);
+					glColor4d(1.0,0.1,0.1,0.69);
 					glVertex2f(-1000.0f, 0.0f);
 					glVertex2f( 1000.0f, 0.0f);
-					glColor4d(0.1,1.0,0.1,0.318);
+					glColor4d(0.1,1.0,0.1,0.69);
 					glVertex2f(0.0f, -1000.0f);
 					glVertex2f(0.0f,  1000.0f);
 				glEnd();
-			glPopMatrix();
-		}
-		// Triangle
-		if((axl::glw::gl1::V_1_5 && m_drawables.polygon.vertex_buffer) || (axl::glw::gl1::V_1_1 && m_drawables.polygon.p_vertex_array))
-		{
+				glPopMatrix();
+			}
+			// Triangle
 			glPushMatrix();
-				glColor4d(1.0,1.0,1.0,1.0);
-				GLE(glPointSize(m_user_data.point_size * (GLfloat)all_scale));
-				GLE(glLineWidth(m_user_data.point_size * (GLfloat)all_scale));
-				if(axl::glw::gl1::V_1_1) // openGL 1.1 implementation
-				{
-					using namespace axl::glw::gl;
-					glBegin(GL_TRIANGLES);
-						glVertex2f(-0.5f, -0.5f);
-						glVertex2f( 0.5f, -0.5f);
-						glVertex2f( 0.0f,  0.5f);
-					glEnd();
-				}
+			glColor4d(1.0,1.0,1.0,1.0);
+			glBegin(GL_TRIANGLES);
+				glVertex2f(-0.5f, -0.5f);
+				glVertex2f( 0.5f, -0.5f);
+				glVertex2f( 0.0f,  0.5f);
+			glEnd();
 			glPopMatrix();
 		}
 		return true;
@@ -247,6 +242,13 @@ void MainView::onKey(axl::game::KeyCode key_code, bool is_down)
 			case axl::game::KEY_ESCAPE:
 				this->destroy();
 				break;
+			case axl::game::KEY_F1:
+				if(!m_key_data.f1_lock)
+				{
+					m_user_data.are_axes_shown = !m_user_data.are_axes_shown;
+					m_key_data.f1_lock = true;
+				}
+				break;
 			case axl::game::KEY_F2:
 				if(!m_key_data.f2_lock)
 				{
@@ -265,33 +267,6 @@ void MainView::onKey(axl::game::KeyCode key_code, bool is_down)
 			case axl::game::KEY_F4:
 				if(!m_key_data.f4_lock)
 				{
-					switch(m_drawables.polygon.draw_mode)
-					{
-						case axl::glw::gl::GL_POINTS:
-							m_drawables.polygon.draw_mode = axl::glw::gl::GL_LINES;
-							printf("polygon.draw-mode: GL_LINES\n");
-							break;
-						case axl::glw::gl::GL_LINES:
-							m_drawables.polygon.draw_mode = axl::glw::gl::GL_LINE_STRIP;
-							printf("polygon.draw-mode: GL_LINE_STRIP\n");
-							break;
-						case axl::glw::gl::GL_LINE_STRIP:
-							m_drawables.polygon.draw_mode = axl::glw::gl::GL_TRIANGLES;
-							printf("polygon.draw-mode: GL_TRIANGLES\n");
-							break;
-						case axl::glw::gl::GL_TRIANGLES:
-							m_drawables.polygon.draw_mode = axl::glw::gl::GL_TRIANGLE_FAN;
-							printf("polygon.draw-mode: GL_TRIANGLE_FAN\n");
-							break;
-						case axl::glw::gl::GL_TRIANGLE_FAN:
-							m_drawables.polygon.draw_mode = axl::glw::gl::GL_TRIANGLE_STRIP;
-							printf("polygon.draw-mode: GL_TRIANGLE_STRIP\n");
-							break;
-						case axl::glw::gl::GL_TRIANGLE_STRIP:
-							m_drawables.polygon.draw_mode = axl::glw::gl::GL_POINTS;
-							printf("polygon.draw-mode: GL_POINTS\n");
-							break;
-					}
 					m_key_data.f4_lock = true;
 				}
 				break;
@@ -316,7 +291,8 @@ void MainView::onKey(axl::game::KeyCode key_code, bool is_down)
 	{
 		switch(key_code)
 		{
-			case axl::game::KEY_F2: m_key_data.f2_lock = false; break;	
+			case axl::game::KEY_F1: m_key_data.f1_lock = false; break;
+			case axl::game::KEY_F2: m_key_data.f2_lock = false; break;
 			case axl::game::KEY_F3: m_key_data.f3_lock = false; break;	
 			case axl::game::KEY_F4: m_key_data.f4_lock = false; break;	
 			case axl::game::KEY_SPACE: m_key_data.space_lock = false; break;
@@ -341,7 +317,7 @@ void MainView::onPointer(int index, int x, int y, bool is_down)
 		if(m_user_data.is_cursor_shown)
 			this->setCursor(axl::game::View::CUR_CROSS);
 		const axl::math::Vec2f screen_position((float)x, (float)y);
-		const axl::math::Vec2f viewport_position = this->screenToViewport(screen);
+		const axl::math::Vec2f viewport_position = this->screenToViewport(screen_position);
 		// left click - down
 		if(index == axl::game::View::PI_LEFT_BUTTON)
 		{
@@ -362,11 +338,11 @@ void MainView::onPointerMove(int index, int x, int y)
 {
 	axl::game::View::onPointerMove(index, x, y);
 	const axl::math::Vec2f screen_position((float)x, (float)y);
-	const axl::math::Vec2f viewport_position = this->screenToViewport(screen);
+	const axl::math::Vec2f viewport_position = this->screenToViewport(screen_position);
 	// left click or touch-1
 	if(pointers[axl::game::View::PI_LEFT_BUTTON])
 	{
-		this->m_origin = viewport;
+		this->m_origin = viewport_position;
 	}
 }
 

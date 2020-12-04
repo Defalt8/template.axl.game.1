@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
-#include <MyGame/MainView.hpp>
-#include <MyGame/Config.hpp>
+#include <MainView.hpp>
 
 void terminating()
 {
@@ -21,10 +20,6 @@ int main()
 	printf("OpenGL version %d.%d\n\n", axl::glw::MAJOR_GL_VERSION, axl::glw::MINOR_GL_VERSION);
 	
 	std::atexit(terminating);
-	// Get the current display settings to see if it is set.
-	axl::game::Application::enumDisplaySettings(&config.display_settings, axl::game::DisplaySetting::IP_CURRENT);
-	printf("> DisplaySize(%dx%d)\n", config.display_settings.width, config.display_settings.height);
-
 	MainView::DefaultCursor = axl::game::View::CUR_HAND;
 	axl::math::Vec2i desktop_size(axl::game::Application::getCurrentDesktopSize());
 	axl::math::Vec2i main_view_size(640, 480);
@@ -32,7 +27,7 @@ int main()
 	
 	MainView main_view(L"MyGame", main_view_position, main_view_size);
 	// Create the view
-	if(!main_view.create(false, MainView::VF_RESIZABLE, &config)) return 1;
+	if(!main_view.create(false, MainView::VF_RESIZABLE)) return 1;
 	if(!main_view.isValid()) return 1;
 	
 	// Show view or die
@@ -48,6 +43,7 @@ int main()
 		if (axl::game::Application::pollEvent()) continue;
 		if(!main_view.is_paused && main_view.main_context.makeCurrent())
 		{
+			main_view.update();
 			main_view.render();
 			main_view.swap();
 		}
