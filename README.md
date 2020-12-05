@@ -26,6 +26,6 @@ A basic template for starting up with a simple 2D project.
   - cd template.axl.game.1
   - mkdir out\\build
   - cd out\\build
-  - cmake -B . -S ../../ (or with a generator of your choosing.) cmake -G <generator> -B . -S ../../
+  - cmake -B . -S ../../ (or with a generator of your choosing.) cmake -G \<generator\> -B . -S ../../
   - cmake --build .
   
