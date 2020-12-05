@@ -30,6 +30,9 @@ int main()
 	if(!main_view.create(false, MainView::VF_RESIZABLE)) return 1;
 	if(!main_view.isValid()) return 1;
 	
+	printf("main_view.config.id== %d\n", main_view.config.id);
+	printf("main_view.main_context.config.id== %d\n", main_view.main_context.config.id);
+
 	// Show view or die
 	if(!main_view.show(MainView::SM_SHOW))
 	{

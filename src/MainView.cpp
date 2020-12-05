@@ -11,7 +11,7 @@
 
 namespace MyGame {
 
-const static double CLOCK_FACTOR = (double)1.0 / (double)CLOCKS_PER_SEC;
+AXLMATHCONSTMODIFIER double CLOCK_FACTOR = (double)1.0 / (double)CLOCKS_PER_SEC;
 
 MainView::MainView(const axl::util::WString& _title, const axl::math::Vec2i& _position, const axl::math::Vec2i& _size, const axl::game::View::Cursor& _cursor) :
 	axl::game::View(_title, _position, _size, _cursor),
@@ -61,21 +61,21 @@ void MainView::destroy()
 
 bool MainView::init()
 {
-	m_scale = 1.0;
-	m_origin.set(0.0f, 0.0f);
-	m_viewport_pos.set(0.0f, 0.0f);
-	m_viewport_to_screen = axl::math::Mat3f::Identity;
-	m_screen_to_viewport = axl::math::Mat3f::Identity;
-	m_projection_min.set(-1.0f, -1.0f);
-	m_projection_max.set(1.0f, 1.0f);
+	m_viewport.set(axl::math::Vec2i(0, 0), this->size);
+	m_projection = Projection::Default;
+	view_transform = axl::math::Transform4::translate(axl::math::Vec3f(0, 0, -5));
+	triangle_transform = axl::math::Mat4f::Identity;
 	// user data
 	m_user_data.is_animating = true;
 	m_user_data.are_axes_shown = true;
-	m_user_data.is_cursor_shown = false;
+	m_user_data.is_cursor_shown = true;
 	m_user_data.last_cursor = DefaultCursor;
 	m_user_data.update_clock = std::clock();
 	m_user_data.delta_time = 0.0;
-	m_user_data.is_cursor_shown = true;
+	m_user_data.animated.triangle_scale_angle = 0.0;
+	m_user_data.animated.triangle_rotation = 0.0;
+	m_user_data.origin.set(0.0f, 0.0f);
+	m_user_data.scale = 1.0;
 	this->setCursor(m_user_data.is_cursor_shown ? m_user_data.last_cursor : CUR_NONE);
 	// key data
 	m_key_data.f2_lock = false;
@@ -89,7 +89,7 @@ bool MainView::init()
 			// opengl initialization
 			using namespace axl::glw::gl;
 			using namespace axl::glw::gl1;
-			GLE(glShadeModel(GL_FLAT));
+			GLE(glShadeModel(GL_SMOOTH));
 			GLE(glEnable(GL_BLEND));
 			GLE(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 			return true;
@@ -100,14 +100,19 @@ bool MainView::init()
 
 void MainView::update()
 {
+	using namespace axl::math;
 	if(this->is_paused || !this->m_user_data.is_animating) return;
 	// calculate delta time
 	m_user_data.delta_time = (double)((double)std::clock() - m_user_data.update_clock) * CLOCK_FACTOR;
 	m_user_data.update_clock = std::clock();
-	// update
-	static double scale_freq = 0.0;
-	scale_freq += axl::math::Angle::degToRad(90.0) * m_user_data.delta_time;
-	m_scale = axl::math::Util::map(std::sin(scale_freq), -1.0, 1.0, 0.0, 1.0);
+	//// update
+	// triangle scale
+	// m_user_data.animated.triangle_scale_angle += Angle::degToRad(90.0) * m_user_data.delta_time;
+	// const double scale = Util::map(std::sin(m_user_data.animated.triangle_scale_angle), -1.0, 1.0, 0.5, 1.5);
+	// triangle rotation
+	m_user_data.animated.triangle_rotation += std::sin(Angle::degToRad(90.0) * m_user_data.delta_time);
+	// triangle_transform = Transform4::scaleRotateZ(Vec3d::filled(scale), m_user_data.animated.triangle_rotation);
+	triangle_transform = Transform4::rotateZ( m_user_data.animated.triangle_rotation);
 }
 
 bool MainView::render()
@@ -115,12 +120,16 @@ bool MainView::render()
 	if(m_main_context.makeCurrent())
 	{
 		using namespace axl::glw::gl;
-		glClearColor(0.01f, 0.01f, 0.02f, 0.0f);
+		glClearColor(0.01f, 0.1f, 0.2f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
+		// projection
+		glMatrixMode(GL_PROJECTION);
+		glLoadMatrixd(m_projection.matrix.values);
+		// view
 		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
-		glTranslatef(m_origin.x, m_origin.y, 0.0);
-		glScalef(m_scale, m_scale, m_scale);
+		view_transform = axl::math::Transform4::scaleTranslate(axl::math::Vec3f::filled((float)m_user_data.scale), axl::math::Vec3f(m_user_data.origin));
+		glLoadMatrixf(view_transform.values);
+		// main drawings
 		if(axl::glw::gl1::V_1_1)
 		{
 			// Axes
@@ -139,10 +148,13 @@ bool MainView::render()
 			}
 			// Triangle
 			glPushMatrix();
-			glColor4d(1.0,1.0,1.0,1.0);
+			glMultMatrixf(triangle_transform.values);
 			glBegin(GL_TRIANGLES);
+				glColor4d(1.0,0.0,0.0,1.0);
 				glVertex2f(-0.5f, -0.5f);
+				glColor4d(0.0,1.0,0.0,1.0);
 				glVertex2f( 0.5f, -0.5f);
+				glColor4d(0.0,0.0,1.0,1.0);
 				glVertex2f( 0.0f,  0.5f);
 			glEnd();
 			glPopMatrix();
@@ -155,19 +167,18 @@ bool MainView::render()
 axl::math::Vec2f MainView::screenToViewport(const axl::math::Vec2f& vec) const
 {
 	return axl::math::Vec2f(
-		m_projection_min.x + vec.x * (m_projection_max.x - m_projection_min.x) / m_viewport_size.x,
-		m_projection_min.y + (size.y - vec.y) * (m_projection_max.y - m_projection_min.y) / m_viewport_size.y
+		(float)(m_projection.left + vec.x * (m_projection.right - m_projection.left) / (float)m_viewport.size.x),
+		(float)(m_projection.bottom + (size.y - vec.y) * (m_projection.top - m_projection.bottom) / (float)m_viewport.size.y)
 	);
 }
 
 axl::math::Vec2f MainView::viewportToScreen(const axl::math::Vec2f& vec) const
 {
 	return axl::math::Vec2f(
-		(vec.x - m_projection_min.x) * m_viewport_size.x / (m_projection_max.x - m_projection_min.x),
-		size.y - ((vec.y - m_projection_min.y) * m_viewport_size.y / (m_projection_max.y - m_projection_min.y))
+		(float)((vec.x - m_projection.left) * m_viewport.size.x / (float)(m_projection.right - m_projection.left)),
+		(float)(size.y - ((vec.y - m_projection.bottom) * m_viewport.size.y / (float)(m_projection.top - m_projection.bottom)))
 	);
 }
-
 
 bool MainView::onCreate(bool recreating)
 {
@@ -195,27 +206,18 @@ void MainView::onSize(int w, int h)
 		if(m_main_context.makeCurrent())
 		{
 			using namespace axl::glw::gl;
-			float viewport_x = 0.0f, viewport_y = 0.0f, viewport_w = (float)w, viewport_h = (float)h;
-			m_viewport_pos.set(viewport_x, viewport_y);
-			m_viewport_size.set(viewport_w, viewport_h);
-			glViewport((int)viewport_x, (int)viewport_y, (int)viewport_w, (int)viewport_h);
-			glMatrixMode(GL_PROJECTION);
-			glLoadIdentity();
+			m_viewport.set(0, 0, w, h);
+			glViewport(m_viewport.position.x, m_viewport.position.y, m_viewport.size.x, m_viewport.size.y);
 			if(w >= h)
 			{
 				const float ratio = (float)w/h;
-				m_projection_min.set(-ratio, -1.0);
-				m_projection_max.set(ratio, 1.0);
+				m_projection.set(Projection::PT_ORTHO, -ratio, ratio, -1.0, 1.0, -10.0, 100.0);
 			}
 			else
 			{
 				const float ratio = (float)h/w;
-				m_projection_min.set(-1.0, -ratio);
-				m_projection_max.set(1.0, ratio);
+				m_projection.set(Projection::PT_ORTHO, -1.0, 1.0, -ratio, ratio, -10.0, 100.0);
 			}
-			glOrtho((double)m_projection_min.x, (double)m_projection_max.x, (double)m_projection_min.y, (double)m_projection_max.y, -1.0, 1.0);
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
 		}
 	}
 }
@@ -311,25 +313,29 @@ void MainView::onPointer(int index, int x, int y, bool is_down)
 	axl::game::View::onPointer(index, x, y, is_down);
 	if(is_down)
 	{
-		// capture cursor when down
-		this->capturePointer(true);
-		// cursor hides when down
-		if(m_user_data.is_cursor_shown)
-			this->setCursor(axl::game::View::CUR_CROSS);
 		const axl::math::Vec2f screen_position((float)x, (float)y);
 		const axl::math::Vec2f viewport_position = this->screenToViewport(screen_position);
-		// left click - down
+		// capture cursor when mouse button is down
+		this->capturePointer(true);
+		// cursor hides when mouse button is down
+		if(m_user_data.is_cursor_shown)
+			this->setCursor(axl::game::View::CUR_CROSS);
+		// 
+		m_user_data.last_pointer_position = viewport_position;
+		m_user_data.last_origin = m_user_data.origin;
+		m_user_data.last_scale = m_user_data.scale;
+		// left button - down
 		if(index == axl::game::View::PI_LEFT_BUTTON)
 		{
-			this->m_origin = viewport_position;
+			//
 		}
 	}
 	else
 	{
-		// cursor shows when released
+		// cursor shows when mouse button is up
 		if(m_user_data.is_cursor_shown)
 			this->setCursor(m_user_data.last_cursor);
-		// release cursor when released
+		// release capture when mouse button is up
 		this->capturePointer(false);
 	}
 }
@@ -339,10 +345,14 @@ void MainView::onPointerMove(int index, int x, int y)
 	axl::game::View::onPointerMove(index, x, y);
 	const axl::math::Vec2f screen_position((float)x, (float)y);
 	const axl::math::Vec2f viewport_position = this->screenToViewport(screen_position);
-	// left click or touch-1
+	// left button down
 	if(pointers[axl::game::View::PI_LEFT_BUTTON])
 	{
-		this->m_origin = viewport_position;
+		m_user_data.origin = m_user_data.last_origin + (viewport_position - m_user_data.last_pointer_position);
+	}
+	else if(pointers[axl::game::View::PI_RIGHT_BUTTON])
+	{
+		m_user_data.scale = axl::math::Util::clamp((m_user_data.last_scale + (viewport_position.y - m_user_data.last_pointer_position.y) * 0.5), 0.01, 1000.0);
 	}
 }
 

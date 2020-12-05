@@ -24,6 +24,8 @@ include_directories( include )
 add_executable( ${MAIN_TARGET}
 	"src/main.cpp"
 	"src/MainView.cpp"
+	"src/Projection.cpp"
+	"src/Viewport.cpp"
 )
 
 target_include_directories( ${MAIN_TARGET}

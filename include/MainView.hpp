@@ -1,16 +1,18 @@
 #pragma once
 #include <ctime>
-#include <axl.math/mat/Mat3f.hpp>
-#include <axl.math/vec/Vec2f.hpp>
-#include <axl.math/vec/Vec4f.hpp>
+#include <axl.math/vec.hpp>
+#include <axl.math/mat.hpp>
 #include <axl.game/Application.hpp>
 #include <axl.game/View.hpp>
 #include <axl.game/Context.hpp>
 #include <axl.glw/glw.hpp>
 #include <axl.glw/gl.hpp>
+#include "Projection.hpp"
+#include "Viewport.hpp"
 
 namespace MyGame
 {
+
 	class MainView : public axl::game::View
 	{
 		public:
@@ -37,22 +39,25 @@ namespace MyGame
 		public:
 			const axl::game::Context& main_context;
 		private:
-			float m_scale;
 			axl::game::Context m_main_context;
-			axl::math::Vec2f m_origin;
-			axl::math::Vec2f m_viewport_pos;
-			axl::math::Vec2f m_viewport_size;
-			axl::math::Vec2f m_projection_min;
-			axl::math::Vec2f m_projection_max;
-			axl::math::Mat3f m_viewport_to_screen;
-			axl::math::Mat3f m_screen_to_viewport;
+			Viewport m_viewport;
+			Projection m_projection;
+			axl::math::Mat4f view_transform;
+			axl::math::Mat4f triangle_transform;
 			struct UserData {
 				bool is_animating;
 				bool are_axes_shown;
 				bool is_cursor_shown;
 				Cursor last_cursor;
+				axl::math::Vec2f last_pointer_position;
 				std::clock_t update_clock;
 				double delta_time;
+				struct Animated {
+					double triangle_scale_angle;
+					double triangle_rotation;
+				} animated;
+				axl::math::Vec2f origin, last_origin;
+				double scale, last_scale;
 			} m_user_data;
 			struct KeyData {
 				bool f1_lock;
